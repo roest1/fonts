@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fonts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      # OFL 1.1 sections 2 and 5: the license travels with the font, unrelicensed.
+      - name: The OFL travels with the fonts
+        run: |
+          [ -s OFL.txt ] || { echo "OFL.txt is missing"; exit 1; }
+          grep -q 'Open Font License' LICENSE || { echo "LICENSE lost the OFL carve-out"; exit 1; }
+
+      # The reason the font exists: one advance, the 0.62em cell 0xProto uses.
+      - name: Both cuts are monospaced at 0.62em
+        run: |
+          uv run -q --no-project --with 'fonttools>=4.50' python -I - <<'EOF'
+          import sys
+          from fontTools.ttLib import TTFont
+          bad = 0
+          for f, style in [("ScienceGothicMono.ttf", "Regular"), ("ScienceGothicMono-Bold.ttf", "Bold")]:
+              t = TTFont(f)
+              n = t["name"]
+              adv = {a for a, _ in t["hmtx"].metrics.values() if a}
+              want = round(0.62 * t["head"].unitsPerEm)
+              checks = {
+                  "family is Science Gothic Mono": n.getDebugName(1) == "Science Gothic Mono",
+                  f"style is {style}": n.getDebugName(2) == style,
+                  "post.isFixedPitch is set": t["post"].isFixedPitch != 0,
+                  f"one advance of {want} units (got {sorted(adv)[:5]})": adv == {want},
+                  "nameID 13 carries the OFL": "Open Font License" in (n.getDebugName(13) or ""),
+                  "nameID 0 keeps the upstream copyright": "Science Gothic" in (n.getDebugName(0) or ""),
+              }
+              for what, ok in checks.items():
+                  print(f"{'ok  ' if ok else 'FAIL'} {f}: {what}")
+                  bad += not ok
+          sys.exit(bad)
+          EOF
+
+      - name: No absolute home paths
+        run: |
+          if git grep -nIE '(/home/|/Users/)[A-Za-z][A-Za-z0-9._-]*' -- . | grep -v '/home/linuxbrew'; then
+            echo "Use \$HOME or ~ instead of an absolute home path."; exit 1
+          fi
+
+  # The one required check. A skipped job counts as passing, so this runs always.
+  ci-ok:
+    name: ci ok
+    if: always()
+    needs: [fonts]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "${{ needs.fonts.result }}" = success ] || { echo "fonts: ${{ needs.fonts.result }}"; exit 1; }

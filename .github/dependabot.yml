@@ -1,0 +1,16 @@
+version: 2
+# The only dependencies here are the Actions CI uses. A release must be a
+# week old before a PR proposes it, as in roest1/dotfiles.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+    cooldown:
+      default-days: 7
+    groups:
+      actions-all:
+        patterns:
+          - "*"

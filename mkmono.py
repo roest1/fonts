@@ -4,13 +4,11 @@
 # ///
 """Derive a monospaced Science Gothic from the upstream variable font.
 
-    uv run wezterm/mkmono.py <ScienceGothic-variable.ttf> <outdir>
+    uv run mkmono.py <ScienceGothic-variable.ttf> <outdir>
 
-Run by hand, not at install time -- the two .ttf files it produces are
-committed under wezterm/fonts/, so a fresh machine needs no python, no network
-and no font tooling. Same arrangement as mise.toml and nvim/lsp-servers: one
-authored generator, a generated artifact next to it. `make mono-font` re-runs
-it after an upstream release.
+Run by hand after an upstream release (README.md), never at install time: the
+two .ttf files it writes are committed, so a machine that uses them needs no
+python, no network and no font tooling.
 
 WHY THIS EXISTS
 ---------------
@@ -394,7 +392,7 @@ def finish(f, adv, style, weight):
 
     # nameID 0/13/14 -- the upstream copyright and the OFL declaration -- are
     # deliberately left untouched. OFL 1.1 section 2 accepts machine-readable
-    # metadata as a place to carry the notice, and wezterm/fonts/OFL.txt is the
+    # metadata as a place to carry the notice, and OFL.txt is the
     # standalone copy alongside it. Do not "clean up" these fields.
 
     # Kerning and per-axis metrics would reintroduce proportional spacing on a
