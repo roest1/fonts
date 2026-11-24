@@ -52,11 +52,33 @@ jobs:
           sys.exit(bad)
           EOF
 
+      - name: The catalogue is valid and README's table is current
+        run: uv run -q catalog.py --check
+
+      # A real install, because the catalogue's family names and download links
+      # are only right if fontconfig ends up answering to them.
+      - name: install.sh installs from the catalogue
+        run: |
+          shellcheck install.sh
+          command -v fc-list >/dev/null || sudo apt-get install -y -q fontconfig
+          export XDG_DATA_HOME="$RUNNER_TEMP/share"
+          # One .tar.xz and one bare .ttf, the two shapes the catalogue has.
+          ./install.sh '0xProto Nerd Font' 'Science Gothic'
+          [ "$(./install.sh '0xProto Nerd Font' 'Science Gothic' | grep -cF 'already installed')" = 2 ]
+
       - name: No absolute home paths
         run: |
           if git grep -nIE '(/home/|/Users/)[A-Za-z][A-Za-z0-9._-]*' -- . | grep -v '/home/linuxbrew'; then
             echo "Use \$HOME or ~ instead of an absolute home path."; exit 1
           fi
+
+      # mkmono.py pins its upstream and its fontTools, and its output is the same
+      # bytes every run. So this proves the fonts came from the script as it is
+      # now, which the checks above cannot: they only look at the files.
+      - name: The committed cuts are what mkmono.py writes
+        run: |
+          uv run -q mkmono.py
+          git diff --exit-code --stat -- '*.ttf' || { echo "Run 'uv run mkmono.py' and commit the fonts with it."; exit 1; }
 
   # The one required check. A skipped job counts as passing, so this runs always.
   ci-ok:

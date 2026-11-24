@@ -1,14 +1,19 @@
 # /// script
-# requires-python = ">=3.10"
-# dependencies = ["fonttools>=4.50"]
+# requires-python = ">=3.11"
+# dependencies = ["fonttools==4.68.0"]
 # ///
 """Derive a monospaced Science Gothic from the upstream variable font.
 
-    uv run mkmono.py <ScienceGothic-variable.ttf> <outdir>
+    uv run mkmono.py
 
-Run by hand after an upstream release (README.md), never at install time: the
-two .ttf files it writes are committed, so a machine that uses them needs no
-python, no network and no font tooling.
+Fetches the upstream release pinned in UPSTREAM below and writes the two cuts
+next to this file. Run by hand after an upstream release (README.md), never at
+install time: the two .ttf files it writes are committed, so a machine that
+uses them needs no python, no network and no font tooling.
+
+The output is a pure function of the source font and the fontTools version
+pinned above, byte for byte, and CI regenerates it to prove the committed
+files are what this script writes.
 
 WHY THIS EXISTS
 ---------------
@@ -74,8 +79,12 @@ from wdth=100 and never scales them. The reach fractions differ because the
 sides do: on 'l' the flag goes left and the tail right, so the two split the
 growth between them, while on 'j' both go left and the tail alone spends it.
 """
+import hashlib
+import io
 import math
 import sys
+import urllib.request
+from pathlib import Path
 
 from fontTools.misc.transform import Transform
 from fontTools.pens.recordingPen import DecomposingRecordingPen, replayRecording
@@ -84,6 +93,14 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables import ttProgram
 from fontTools.varLib import instancer
+
+# Upstream by commit, not by branch: google/fonts replaces this file in place on
+# a release, and the committed cuts have to trace back to one exact source. To
+# take a release, change both lines and run this script.
+UPSTREAM = ("https://raw.githubusercontent.com/google/fonts/"
+            "37cc7fb32bb505bd8b0c3b3ef2706c99ce49aac5/"     # Version 1.035
+            "ofl/sciencegothic/ScienceGothic%5BCTRS,slnt,wdth,wght%5D.ttf")
+UPSTREAM_SHA256 = "246e4d33a6fcb3846094e5c4c034616f83e9ae10100316df32e2436362deab3d"
 
 CELL_EM = 0.62                        # 0xProto's uniform advance
 WIDTHS = list(range(50, 205, 5))
@@ -163,10 +180,19 @@ def contours_of(rec):
 
 
 def monospace(src, wght):
-    """Per-glyph width instancing onto a single advance."""
+    """Per-glyph width instancing onto a single advance. `src` is the font's bytes."""
     insts = {}
     for w in WIDTHS:
-        f = TTFont(src)
+        # recalcTimestamp=False keeps upstream's head.modified instead of
+        # stamping the build time, which is the one thing that made two runs
+        # over the same source differ.
+        f = TTFont(io.BytesIO(src), recalcTimestamp=False)
+        if w != 100:
+            # Only the outlines and advances of these are read. Instancing
+            # their layout tables too was half the run time.
+            for tag in ("GSUB", "GPOS", "GDEF"):
+                if tag in f:
+                    del f[tag]
         instancer.instantiateVariableFont(
             f, {"wght": wght, "wdth": w, "slnt": 0, "CTRS": 0},
             inplace=True, updateFontNames=False)
@@ -356,9 +382,6 @@ def finish(f, adv, style, weight):
             prog.fromBytecode(b"")
             g.program = prog
 
-    f["hhea"].advanceWidthMax = adv
-    f["hhea"].minLeftSideBearing = 0
-    f["hhea"].minRightSideBearing = 0
     f["post"].isFixedPitch = 1
     f["OS/2"].xAvgCharWidth = adv
     f["OS/2"].panose.bProportion = 9        # monospaced
@@ -370,10 +393,6 @@ def finish(f, adv, style, weight):
         f["head"].macStyle |= 1
     else:
         f["head"].macStyle &= ~1
-
-    drawn = [g for g in order if f["glyf"][g].numberOfContours]
-    f["head"].xMin = min(f["glyf"][g].xMin for g in drawn)
-    f["head"].xMax = max(f["glyf"][g].xMax for g in drawn)
 
     n = f["name"]
     n.setName("Science Gothic Mono", 1, 3, 1, 0x409)
@@ -402,16 +421,26 @@ def finish(f, adv, style, weight):
             del f[tag]
 
 
+def fetch_upstream():
+    with urllib.request.urlopen(UPSTREAM) as r:
+        data = r.read()
+    got = hashlib.sha256(data).hexdigest()
+    if got != UPSTREAM_SHA256:
+        sys.exit(f"{UPSTREAM}\n  sha256 is {got}\n  expected  {UPSTREAM_SHA256}")
+    return data
+
+
 def main():
-    if len(sys.argv) != 3:
+    if sys.argv[1:]:
         sys.exit(__doc__.strip().splitlines()[2].strip())
-    src, outdir = sys.argv[1], sys.argv[2].rstrip("/")
+    src = fetch_upstream()
+    outdir = Path(__file__).parent
 
     for fname, style, weight in CUTS:
         f, adv, scaled = monospace(src, float(weight))
         feet = add_feet(f, adv)
         finish(f, adv, style, weight)
-        f.save(f"{outdir}/{fname}")
+        f.save(outdir / fname)
         print(f"  {fname:28s} advance={adv}  scaled={scaled}  feet -> {' '.join(feet)}")
 
 
