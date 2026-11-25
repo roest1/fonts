@@ -24,17 +24,20 @@ The build is reproducible: the same upstream file and the fontTools version pinn
 
 - `MaterialIconTheme.ttf`: the icons, at U+100000 to U+1004E7, each one em square.
 - `material-icons.tsv`: which code point is which icon, and which icon a file extension, file name or folder name gets. The associations are upstream's own. Read an icon's code point from here; it moves when upstream adds an icon.
+- `eza/theme.yml`: the same associations for [eza](https://github.com/eza-community/eza) 0.20 or newer, which cannot read the table. Use it with `EZA_CONFIG_DIR=<this directory>/eza EZA_ICON_SPACING=2`.
 - `MIT-material-icon-theme.txt`: upstream's license, which travels with the font.
 
 Fourteen icons use gradients, which this format cannot hold. Each of those becomes one of its colors.
 
-All three files are committed. To regenerate them:
+eza takes an icon for a name or an extension and nothing else, so a folder or file with no icon of its own keeps eza's built-in Nerd Font glyph: a listing mixes the two sets. The theme has about 12,000 entries, and eza reads all of them on every run, which measured 16 ms on top of a 2 ms `ls`.
+
+All four files are committed. To regenerate them:
 
 ```bash
 uv run mkicons.py
 ```
 
-It takes about two minutes. It fetches the npm release pinned in `mkicons.py` by version and SHA-256, and builds with the packages pinned in `mkicons.py.lock`. To take a new release, change `VERSION` and `UPSTREAM_SHA256`, run it, and commit the three files with the script. To move the packages, run `uv lock --script mkicons.py --upgrade` first.
+It takes about two minutes. It fetches the npm release pinned in `mkicons.py` by version and SHA-256, and builds with the packages pinned in `mkicons.py.lock`. To take a new release, change `VERSION` and `UPSTREAM_SHA256`, run it, and commit the four files with the script. To move the packages, run `uv lock --script mkicons.py --upgrade` first.
 
 The build is reproducible, and CI regenerates the files and fails if they differ.
 

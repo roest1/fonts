@@ -95,6 +95,23 @@ jobs:
           rows = [l.rstrip("\n").split("\t") for l in open("material-icons.tsv") if not l.startswith("#")]
           icons = {name: int(cp, 16) for kind, name, cp in rows if kind == "icon"}
           named = {icon for kind, _, icon in rows if kind != "icon"}
+          # eza/theme.yml, a line at a time: `  "name": {icon: {glyph: "X"}}`.
+          import json, re
+          theme, part = {"filenames": {}, "extensions": {}}, None
+          odd = []
+          for line in open("eza/theme.yml"):
+              if line.startswith("#"):
+                  continue
+              if not line.startswith(" "):
+                  part = line.rstrip(":\n")
+                  continue
+              m = re.fullmatch(r'  (".*"): \{icon: \{glyph: (".*")\}\}\n', line)
+              if m and part in theme:
+                  theme[part][json.loads(m.group(1))] = json.loads(m.group(2))
+              else:
+                  odd.append(line)
+          drawn = [g for part in theme.values() for g in part.values()]
+          exts = {k: i for kind, k, i in rows if kind == "ext"}
           n = f["name"]
           adv = {a for a, _ in f["hmtx"].metrics.values()}
           checks = {
@@ -109,6 +126,13 @@ jobs:
               "nameID 13 carries the MIT license": "MIT License" in (n.getDebugName(13) or ""),
               "every association names an icon that exists": named <= set(icons),
               "every folder icon has an -open twin": all(i + "-open" in icons for k, _, i in rows if k == "folder"),
+              f"eza/theme.yml is nothing but icon lines (got {odd[:2]})": not odd and len(drawn) > 1000,
+              "eza/theme.yml draws only characters the font has": all(len(g) == 1 and ord(g) in cmap for g in drawn),
+              "eza/theme.yml gives an extension the table's icon": all(
+                  g == chr(icons[exts[e]]) for e, g in theme["extensions"].items() if e in exts
+              ),
+              "eza/theme.yml spells a README the way it is written": theme["filenames"].get("README.md")
+              == theme["filenames"].get("readme.md") is not None,
           }
           bad = 0
           for what, ok in checks.items():
@@ -123,7 +147,8 @@ jobs:
       - name: The committed icon font is what mkicons.py writes
         run: |
           uv run -q mkicons.py
-          git diff --exit-code --stat -- MaterialIconTheme.ttf material-icons.tsv MIT-material-icon-theme.txt \
+          git add -N eza
+          git diff --exit-code --stat -- MaterialIconTheme.ttf material-icons.tsv MIT-material-icon-theme.txt eza \
             || { echo "Run 'uv run mkicons.py' and commit what it writes with it."; exit 1; }
 
   # The one required check. A skipped job counts as passing, so this runs always.

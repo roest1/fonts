@@ -18,6 +18,10 @@ Science Gothic Mono, built by `mkmono.py` and committed, a color icon font built
 
 - **In WezTerm the icon font is named with `assume_emoji_presentation = false`.** WezTerm takes a color font for an emoji font and will not use one for a text code point, which a private-use one is. Named plainly, `wezterm ls-fonts` lists the font as found and `--text` on an icon still says no font has the glyph. That reads as a broken font and is not one.
 
+- **An icon that looks small is not fixed in the font.** The icons already fill their square: the median one spans 89% of it, and 534 of the 1256 cannot grow 5% without leaving it. The square is one em, which is small beside a line of text. WezTerm's `scale` on the fallback entry is the knob (`scale = 1.2`), and 1.2 is about where it stops: past two cells WezTerm shrinks the glyph to fit. Scaled, an icon covers the space after it, so whoever prints one puts two spaces before the name.
+
+- **`eza/theme.yml` is the table again, for the one reader that cannot take a table, and it is less than the table.** eza matches a name exactly and an extension by its last dot, and has no way to be told what everything else gets. So `mkicons.py` writes each name in the spellings people use (`readme.md`, `Readme.md`, `README.md`), drops `d.ts`, and leaves unknown files and folders to eza's own glyph. Do not hand-edit it, and do not trim it to make `ls` faster without measuring: it is upstream's list, and a curated one is a list someone has to keep.
+
 - **Open folders are left out of the table by rule, and the build checks the rule.** An open folder's icon is its closed one's name plus `-open`. If upstream breaks that, `mkicons.py` stops.
 
 - **The MIT notice is in three places.** `MIT-material-icon-theme.txt` is upstream's file, the font's nameID 0 and 13 carry the copyright and the license text, and `LICENSE` says the icon font is under Material Extensions' copyright and not mine. MIT asks that the notice go with every copy, and a font file gets copied on its own.

@@ -45,9 +45,9 @@ THE TABLE
 ---------
 material-icons.tsv, three tab-separated columns, sorted, `#` for comments:
 
-    icon         rust          100412     an icon and its code point, in hex
+    icon         rust          100439     an icon and its code point, in hex
     ext          rs            rust       a file extension and its icon
-    file         cargo.toml    rust       a whole file name
+    file         readme.md     readme     a whole file name
     folder       src           folder-src
     lang         git-commit    git        an editor's language id
     default      file          file       what a thing with no icon of its own gets
@@ -58,7 +58,28 @@ rule holds and leaves them out, which is a third of the file.
 
 The associations are upstream's own, out of the manifest its editor extension
 ships, for a dark background. They are here so that nobody has to restate which
-icon a Cargo.toml gets.
+icon a README gets.
+
+THE EZA THEME
+-------------
+eza/theme.yml is the same table for the one reader that cannot take it as a
+table. eza draws a file's icon from a list compiled into it, and since 0.20 a
+theme.yml can replace the icon for a name or an extension. Point eza at it:
+
+    EZA_CONFIG_DIR=<this directory>/eza  EZA_ICON_SPACING=2  eza --icons
+
+It is less than the table, because eza matches less than an editor does:
+
+  - A name is matched exactly, case and all, where the editor ignores case. So
+    a name is written as upstream has it and again the two ways people really
+    spell it: `readme.md`, `Readme.md`, `README.md`.
+  - An extension is what follows the LAST dot. `d.ts` cannot be said, and a
+    `.d.ts` file gets the `ts` icon.
+  - A name is a name: a folder called `docs` and a file called `docs` get one
+    icon. Where upstream gives both, the file's wins.
+  - THERE IS NO SAYING WHAT EVERYTHING ELSE GETS. A folder or a file with no
+    icon of its own keeps eza's built-in glyph, so a listing is this set for
+    what it knows and a Nerd Font glyph for what it does not.
 """
 import hashlib
 import io
@@ -83,6 +104,7 @@ UPSTREAM_SHA256 = "6ea13a2dece7ca953c0315b1e93348660c02bb235706275d215be69f09d98
 FAMILY = "Material Icon Theme"
 FONT = "MaterialIconTheme.ttf"
 TABLE = "material-icons.tsv"
+EZA = "eza/theme.yml"
 LICENSE = "MIT-material-icon-theme.txt"
 
 FIRST = 0x100000
@@ -234,6 +256,69 @@ def table(manifest, codepoints):
     return head + "".join(f"{kind}\t{key}\t{value}\n" for kind, key, value in sorted(rows))
 
 
+def spellings(name):
+    """`name`, and the capitalized ways the same file is written on disk.
+
+    eza matches a name exactly and upstream lists them in lower case, so
+    without these a README.md is only its extension and a LICENSE or a
+    Makefile is nothing at all. `Name` for anything that starts with a letter,
+    and `NAME.ext` when what is before the first dot is all letters: README.md,
+    LICENSE, Dockerfile. Upstream's own spelling is always first.
+    """
+    out = [name]
+    if name[:1].islower():
+        out.append(name[0].upper() + name[1:])
+        stem, dot, rest = name.partition(".")
+        if stem.isalpha():
+            out.append(stem.upper() + dot + rest)
+    return out
+
+
+def eza_theme(manifest, codepoints):
+    """eza/theme.yml, as text. See THE EZA THEME above."""
+    def glyph(icon):
+        return chr(codepoints[icon])
+
+    # Lowest claim first, so that a later one overwrites it: a spelling this
+    # script made up never displaces one upstream wrote down, and a file's
+    # icon wins a name it shares with a folder.
+    names = {}
+    for table in (manifest["folderNames"], manifest["fileNames"]):
+        # A folder association can be a path (`.github/workflows`), which is
+        # never the name of anything eza lists.
+        own = {k: icon for k, icon in table.items() if "/" not in k}
+        for k, icon in own.items():
+            for spelling in spellings(k)[1:]:
+                names.setdefault(spelling, glyph(icon))
+        for k, icon in own.items():
+            names[k] = glyph(icon)
+
+    # eza lowers a file's extension before it looks, and takes only what is
+    # after the last dot.
+    extensions = {
+        k.lower(): glyph(icon)
+        for k, icon in manifest["fileExtensions"].items()
+        if "." not in k
+    }
+
+    def block(title, entries):
+        # JSON's strings are YAML's double-quoted ones, and quoting every key
+        # is what lets `.gitignore`, `#recycle` and `404.html` be keys at all.
+        rows = "".join(
+            f"  {json.dumps(k, ensure_ascii=False)}: "
+            f"{{icon: {{glyph: {json.dumps(v, ensure_ascii=False)}}}}}\n"
+            for k, v in sorted(entries.items())
+        )
+        return f"{title}:\n{rows}"
+
+    head = (
+        f"# Material Icon Theme {VERSION} for eza: the icon a name or an extension gets.\n"
+        f"# Written by mkicons.py from the same release as {FONT}; see its\n"
+        "# header for what eza cannot be told. Do not edit: regenerate.\n"
+    )
+    return head + block("filenames", names) + block("extensions", extensions)
+
+
 def main():
     if sys.argv[1:]:
         sys.exit(__doc__.strip().splitlines()[2].strip())
@@ -251,10 +336,13 @@ def main():
         font.save(outdir / FONT)
 
     (outdir / TABLE).write_text(table(manifest, codepoints))
+    (outdir / EZA).parent.mkdir(exist_ok=True)
+    (outdir / EZA).write_text(eza_theme(manifest, codepoints))
     (outdir / LICENSE).write_bytes(license_bytes)
     last = FIRST + len(codepoints) - 1
     print(f"  {FONT:24s} {len(codepoints)} icons, U+{FIRST:X} to U+{last:X}")
     print(f"  {TABLE:24s} {sum(1 for _ in open(outdir / TABLE)) - 3} rows")
+    print(f"  {EZA:24s} {sum(1 for _ in open(outdir / EZA)) - 5} names and extensions")
 
 
 if __name__ == "__main__":
