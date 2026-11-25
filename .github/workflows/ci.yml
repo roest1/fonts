@@ -80,6 +80,52 @@ jobs:
           uv run -q mkmono.py
           git diff --exit-code --stat -- '*.ttf' || { echo "Run 'uv run mkmono.py' and commit the fonts with it."; exit 1; }
 
+      # What the icon font promises whoever draws from it, checked on the
+      # committed files: the table and the font agree, and a width can be
+      # declared once for the whole set.
+      - name: The icon font is its icons, one width, with its license
+        run: |
+          [ -s MIT-material-icon-theme.txt ] || { echo "MIT-material-icon-theme.txt is missing"; exit 1; }
+          grep -q 'Material Extensions' LICENSE || { echo "LICENSE lost the Material Icon Theme notice"; exit 1; }
+          uv run -q --no-project --with 'fonttools>=4.50' python -I - <<'EOF'
+          import sys
+          from fontTools.ttLib import TTFont
+          f = TTFont("MaterialIconTheme.ttf")
+          cmap = f.getBestCmap()
+          rows = [l.rstrip("\n").split("\t") for l in open("material-icons.tsv") if not l.startswith("#")]
+          icons = {name: int(cp, 16) for kind, name, cp in rows if kind == "icon"}
+          named = {icon for kind, _, icon in rows if kind != "icon"}
+          n = f["name"]
+          adv = {a for a, _ in f["hmtx"].metrics.values()}
+          checks = {
+              "family is Material Icon Theme": n.getDebugName(1) == "Material Icon Theme",
+              f"the table and the font name the same {len(icons)} code points": set(icons.values()) == set(cmap),
+              "no two icons share a code point": len(set(icons.values())) == len(icons),
+              "every icon is in Supplementary Private Use Area-B": all(0x100000 <= c <= 0x10FFFD for c in cmap),
+              "it is a COLR version 0 font with a palette": "COLR" in f and f["COLR"].version == 0 and "CPAL" in f,
+              f"one advance, the em (got {sorted(adv)[:5]})": adv == {f["head"].unitsPerEm},
+              "post.isFixedPitch is set": f["post"].isFixedPitch != 0,
+              "nameID 0 keeps upstream's copyright": "Material Extensions" in (n.getDebugName(0) or ""),
+              "nameID 13 carries the MIT license": "MIT License" in (n.getDebugName(13) or ""),
+              "every association names an icon that exists": named <= set(icons),
+              "every folder icon has an -open twin": all(i + "-open" in icons for k, _, i in rows if k == "folder"),
+          }
+          bad = 0
+          for what, ok in checks.items():
+              print(f"{'ok  ' if ok else 'FAIL'} MaterialIconTheme.ttf: {what}")
+              bad += not ok
+          sys.exit(bad)
+          EOF
+
+      # mkicons.py pins its upstream by hash and its packages by lock file, and
+      # its output is the same bytes every run. About five minutes here: it is
+      # 1256 SVGs through a path-boolean engine.
+      - name: The committed icon font is what mkicons.py writes
+        run: |
+          uv run -q mkicons.py
+          git diff --exit-code --stat -- MaterialIconTheme.ttf material-icons.tsv MIT-material-icon-theme.txt \
+            || { echo "Run 'uv run mkicons.py' and commit what it writes with it."; exit 1; }
+
   # The one required check. A skipped job counts as passing, so this runs always.
   ci-ok:
     name: ci ok
