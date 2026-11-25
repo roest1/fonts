@@ -13,7 +13,14 @@ grant reaching those two files would conflict with it. Upstream declares no
 Reserved Font Name, which is why "Science Gothic Mono" is a permissible name
 for a modified version.
 
-Everything else (mkmono.py, the CI) is under the MIT License.
+MaterialIconTheme.ttf and material-icons.tsv are built by mkicons.py from
+Material Icon Theme (https://github.com/material-extensions/vscode-material-icon-theme),
+which is under the MIT License with a copyright holder of its own: Copyright
+(c) 2025 Material Extensions. Its license is in MIT-material-icon-theme.txt and
+in the font's name table, and that notice, not the one below, is the one those
+two files carry.
+
+Everything else (mkmono.py, mkicons.py, the CI) is under the MIT License.
 
 ---
 
